@@ -6,12 +6,13 @@
 trans-search/
 ├── backend/
 │   ├── main.py            # 后端
-│   ├── requirements.txt
+│   ├── requirements.txt   # 依赖
 │   ├── Dockerfile
 │   └── .env.example       # 复制为 .env
 ├── frontend/
-│   └── index.html         # 静态前端
-├── scripts/
-│   └── seed.py            # 示例数据录入脚本
+│   ├── index.html         # 用户页面
+│   └── admin-index.html   # 管理后台
 └── docker-compose.yml     # 一键启动 Qdrant + 后端
 ```
+
+泠云加油喵🥺
