@@ -71,3 +71,17 @@ export function validateChunkSize(v: number): void {
 export function validateThreshold(v: number): void {
   if (v < 0 || v > 1) throw new Error("score_threshold range: 0.0~1.0")
 }
+
+export async function loadConfig(env: Env): Promise<Config> {
+  const cfg = new Config(env)
+  const saved = await env.CONFIG_KV.get("config", "json") as Partial<ConfigUpdate> | null
+  if (saved) cfg.apply(saved)
+  return cfg
+}
+
+export async function saveConfig(env: Env, update: ConfigUpdate): Promise<Config> {
+  const cfg = await loadConfig(env)
+  cfg.apply(update)
+  await env.CONFIG_KV.put("config", JSON.stringify(cfg.toJSON()))
+  return cfg
+}
