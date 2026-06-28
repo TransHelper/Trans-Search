@@ -1,6 +1,6 @@
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import { Config, validateBaseUrl, validateChunkSize, validateThreshold } from "./config"
+import { Config, loadConfig, saveConfig, validateBaseUrl, validateChunkSize, validateThreshold } from "./config"
 import { sanitizeQuery, splitChunks, buildContextPrefix, parseTagList } from "./chunk"
 import { textToSparse } from "./sparse"
 import { embed, expandQuery } from "./embedding"
@@ -78,7 +78,7 @@ app.get("/search", async (c) => {
   const ip = getClientIP(c.req.raw)
   checkRateLimit("search", ip, RATE_LIMITS.search.limit, RATE_LIMITS.search.window)
 
-  const cfg = new Config(c.env)
+  const cfg = await loadConfig(c.env)
   const q = sanitizeQuery(c.req.query("q") ?? "", parseInt(c.env.SEARCH_MAX_LEN ?? "200", 10))
   const category = c.req.query("category") ?? null
   const sourceSite = c.req.query("source_site") ?? null
@@ -208,7 +208,7 @@ app.get("/tree", async (c) => {
 app.get("/stats", async (c) => {
   const ip = getClientIP(c.req.raw)
   checkRateLimit("search", ip, RATE_LIMITS.search.limit, RATE_LIMITS.search.window)
-  const cfg = new Config(c.env)
+  const cfg = await loadConfig(c.env)
   const info = await getCollectionInfo(c.env)
   return c.json({
     total_chunks: info.points_count,
@@ -239,10 +239,8 @@ app.patch("/config", async (c) => {
   if (update.chunk_size !== undefined) validateChunkSize(update.chunk_size)
   if (update.score_threshold !== undefined) validateThreshold(update.score_threshold)
 
-  const cfg = new Config(c.env)
-  cfg.apply(update)
-
-  return c.json({ updated: Object.keys(update).filter((k) => update[k as keyof ConfigUpdate] !== undefined) })
+  const cfg = await saveConfig(c.env, update)
+  return c.json(cfg.toJSON())
 })
 
 function validateArticle(a: ArticleInput, env: Env) {
@@ -275,7 +273,7 @@ app.post("/articles", async (c) => {
   checkRateLimit("write", ip, RATE_LIMITS.write.limit, RATE_LIMITS.write.window)
   requireAdmin(c.req.header("X-Admin-Key"), c.env)
 
-  const cfg = new Config(c.env)
+  const cfg = await loadConfig(c.env)
   const article = await c.req.json<ArticleInput>()
   validateArticle(article, c.env)
 
