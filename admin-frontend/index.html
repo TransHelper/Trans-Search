@@ -776,7 +776,7 @@ function teShowNodeArts(){
     const m2={...meta};
     if(n.type==='site') m2.source_site=n.name;
     else if(n.type==='category') m2.category=n.name;
-    else if(n.type==='chapter') m2.chapter=n.name;
+    else if(n.type==='chapter') m2.chapter=m2.chapter ? m2.chapter+'/'+n.name : n.name;
     return (n.children||[]).flatMap(c=>collectArts(c,m2));
   }
   tePanelArts=collectArts(node,{});
