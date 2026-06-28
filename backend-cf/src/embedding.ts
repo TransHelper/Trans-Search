@@ -45,10 +45,10 @@ export async function expandQuery(q: string, env: Env, cfg: Config): Promise<str
           },
         ],
         "thinking": {
-            "type": "enabled"
+            "type": "disabled"
         },
         max_tokens: 65536,
-        temperature: 1.0,
+        temperature: 0.3,
       }),
     })
     console.log('chat resp status:', resp.status)
