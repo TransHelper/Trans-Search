@@ -165,44 +165,49 @@ app.get("/tree", async (c) => {
     offset = result.next_page_offset
   }
 
-  const tree: Record<string, Record<string, Record<string, unknown[]>>> = {}
-  for (const p of allPayloads) {
-    const site = (p["source_site"] as string) || "未分类来源"
-    const cat = (p["category"] as string) || "未分类"
-    const ch = (p["chapter"] as string) || "其他"
-    if (!tree[site]) tree[site] = {}
-    if (!tree[site][cat]) tree[site][cat] = {}
-    if (!tree[site][cat][ch]) tree[site][cat][ch] = []
-    tree[site][cat][ch].push({
-      article_id: p["article_id"],
-      title: p["title"],
-      url: p["url"] ?? null,
-      flags: p["flags"] ?? [],
-      tags: p["tags"] ?? [],
-    })
+  type TreeNode = { name: string; type: string; children: TreeNode[] }
+
+  function insertChapter(parent: TreeNode, parts: string[], article: TreeNode) {
+    if (parts.length === 0) {
+      parent.children.push(article)
+      return
+    }
+    const [head, ...rest] = parts
+    let node = parent.children.find((c) => c.type === "chapter" && c.name === head)
+    if (!node) {
+      node = { name: head, type: "chapter", children: [] }
+      parent.children.push(node)
+    }
+    insertChapter(node, rest, article)
   }
 
-  const result: { name: string; type: string; children: unknown[] }[] = []
-  for (const [site, cats] of Object.entries(tree)) {
-    const siteNode: { name: string; type: string; children: unknown[] } = {
-      name: site, type: "site", children: [],
-    }
-    for (const [cat, chapters] of Object.entries(cats)) {
-      const catNode: { name: string; type: string; children: unknown[] } = {
-        name: cat, type: "category", children: [],
-      }
-      for (const [chapter, articles] of Object.entries(chapters)) {
-        catNode.children.push({
-          name: chapter,
-          type: "chapter",
-          children: (articles as Record<string, unknown>[]).map((a) => ({ type: "article", ...a })),
-        })
-      }
+  const siteMap = new Map<string, TreeNode>()
+  for (const p of allPayloads) {
+    const site = (p["source_site"] as string) || "未分类来源"
+    const cat  = (p["category"]    as string) || "未分类"
+    const ch   = (p["chapter"]     as string) || ""
+
+    if (!siteMap.has(site)) siteMap.set(site, { name: site, type: "site", children: [] })
+    const siteNode = siteMap.get(site)!
+
+    let catNode = siteNode.children.find((c) => c.type === "category" && c.name === cat)
+    if (!catNode) {
+      catNode = { name: cat, type: "category", children: [] }
       siteNode.children.push(catNode)
     }
-    result.push(siteNode)
+
+    const article: TreeNode = {
+      name: p["title"] as string,
+      type: "article",
+      children: [],
+      ...{ article_id: p["article_id"], title: p["title"], url: p["url"] ?? null, flags: p["flags"] ?? [], tags: p["tags"] ?? [] },
+    }
+
+    const parts = ch ? ch.split("/").filter(Boolean) : []
+    insertChapter(catNode, parts, article)
   }
-  return c.json(result)
+
+  return c.json(Array.from(siteMap.values()))
 })
 
 app.get("/stats", async (c) => {
