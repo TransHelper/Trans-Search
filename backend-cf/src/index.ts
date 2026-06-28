@@ -79,6 +79,7 @@ app.get("/search", async (c) => {
   checkRateLimit("search", ip, RATE_LIMITS.search.limit, RATE_LIMITS.search.window)
 
   const cfg = await loadConfig(c.env)
+  console.log('query_expand:', cfg.query_expand, 'hybrid:', cfg.hybrid_search)
   const q = sanitizeQuery(c.req.query("q") ?? "", parseInt(c.env.SEARCH_MAX_LEN ?? "200", 10))
   const category = c.req.query("category") ?? null
   const sourceSite = c.req.query("source_site") ?? null
