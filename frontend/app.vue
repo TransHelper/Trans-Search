@@ -18,6 +18,9 @@
           <NuxtLink to="/config" class="px-3 py-1.5 rounded-md text-sm hover:bg-gray-100" active-class="bg-primary-50 text-primary-700 font-medium">
             管理
           </NuxtLink>
+          <NuxtLink to="/about" class="px-3 py-1.5 rounded-md text-sm hover:bg-gray-100" active-class="bg-primary-50 text-primary-700 font-medium">
+            关于
+          </NuxtLink>
         </nav>
       </div>
     </header>

@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-3xl mx-auto px-4 py-8">
+  <div class="max-w-4xl mx-auto px-4 py-8">
     <h1 class="text-2xl font-bold mb-6">管理设置</h1>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
@@ -20,6 +20,7 @@
       <div v-if="loading" class="text-center py-8 text-gray-400">加载配置…</div>
       <div v-if="error" class="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">{{ error }}</div>
 
+      <!-- 运行时配置 -->
       <div v-if="config" class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
         <h2 class="text-lg font-semibold mb-4">运行时配置</h2>
         <div class="space-y-4">
@@ -33,7 +34,8 @@
         </div>
       </div>
 
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+      <!-- 修改配置 -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
         <h2 class="text-lg font-semibold mb-4">修改配置</h2>
         <div class="space-y-3">
           <div v-for="field in editableFields" :key="field.key" class="flex items-center gap-3">
@@ -70,12 +72,89 @@
           </div>
         </div>
       </div>
+
+      <!-- ══════ 长期缓存：高频词管理 ══════ -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">高频词缓存（长期记忆）</h2>
+          <button
+            class="px-3 py-1 text-xs border border-gray-300 rounded-md text-gray-500 hover:bg-gray-50"
+            @click="loadKeywords"
+          >刷新</button>
+        </div>
+
+        <!-- 新增 / 编辑 -->
+        <div class="flex flex-wrap items-center gap-2 mb-4 p-3 bg-gray-50 rounded-lg">
+          <input
+            v-model="newKeyword"
+            placeholder="关键词（如 HRT）"
+            class="flex-1 min-w-[120px] px-3 py-1.5 border border-gray-300 rounded-md text-sm"
+          />
+          <input
+            v-model="newExpansionsInput"
+            placeholder="扩展词（逗号分隔）"
+            class="flex-[2] min-w-[200px] px-3 py-1.5 border border-gray-300 rounded-md text-sm"
+          />
+          <button
+            class="px-4 py-1.5 bg-primary-600 text-white rounded-md text-sm hover:bg-primary-700 disabled:opacity-50"
+            :disabled="!newKeyword.trim() || !newExpansionsInput.trim()"
+            @click="addKeyword"
+          >{{ editingKeyword ? "更新" : "添加" }}</button>
+          <button
+            v-if="editingKeyword"
+            class="px-3 py-1.5 border border-gray-300 rounded-md text-sm text-gray-500 hover:bg-gray-50"
+            @click="cancelEdit"
+          >取消</button>
+        </div>
+
+        <!-- 关键词列表 -->
+        <div v-if="keywordsLoading" class="text-center py-4 text-gray-400 text-sm">加载中…</div>
+        <div v-else-if="Object.keys(keywords).length === 0" class="text-center py-4 text-gray-400 text-sm">
+          暂无高频词缓存，添加后搜索将优先使用预设扩展词
+        </div>
+        <div v-else class="space-y-2">
+          <div
+            v-for="(entry, key) in keywords"
+            :key="key"
+            class="flex items-start gap-2 p-3 border border-gray-100 rounded-lg hover:bg-gray-50"
+          >
+            <div class="flex-1 min-w-0">
+              <span class="font-mono text-sm font-medium text-gray-800">{{ key }}</span>
+              <div class="text-xs text-gray-500 mt-1">
+                ↳ {{ entry.expansions.join("、") }}
+              </div>
+            </div>
+            <div class="flex gap-1 shrink-0">
+              <button
+                class="px-2 py-1 text-xs border border-gray-200 rounded text-gray-500 hover:bg-gray-100"
+                @click="editKeyword(key as string, entry.expansions)"
+              >编辑</button>
+              <button
+                class="px-2 py-1 text-xs border border-red-200 rounded text-red-500 hover:bg-red-50"
+                @click="removeKeyword(key as string)"
+              >删除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════ 短期缓存 ══════ -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">短期缓存（内存）</h2>
+          <button
+            class="px-3 py-1 text-xs border border-red-200 rounded-md text-red-500 hover:bg-red-50"
+            @click="clearCache"
+          >清除全部</button>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">搜索结果自动缓存 5 分钟，重复搜索直接从内存返回</p>
+      </div>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-const { setAdminKey, getAdminKey, getConfig, updateConfig } = useApi()
+const { setAdminKey, getAdminKey, getConfig, updateConfig, getCacheKeywords, putCacheKeyword, deleteCacheKeyword, clearShortCache } = useApi()
 const adminKey = ref(getAdminKey() ?? "")
 const authenticated = ref(!!getAdminKey())
 const config = ref<any>(null)
@@ -84,6 +163,13 @@ const saving = ref(false)
 const error = ref("")
 const saved = ref(false)
 
+// ── 高频词缓存 ──
+const keywords = ref<Record<string, { expansions: string[] }>>({})
+const keywordsLoading = ref(false)
+const newKeyword = ref("")
+const newExpansionsInput = ref("")
+const editingKeyword = ref<string | null>(null)
+
 const labelMap: Record<string, string> = {
   embed_model: "Embedding 模型",
   chat_model: "对话模型",
@@ -91,6 +177,7 @@ const labelMap: Record<string, string> = {
   chunk_overlap: "分块重叠",
   score_threshold: "分数阈值",
   query_expand: "查询扩展",
+  query_expand_threshold: "扩展触发阈值(字符)",
   hybrid_search: "混合搜索",
 }
 
@@ -101,6 +188,7 @@ const editableFields = [
   { key: "chunk_overlap", label: "分块重叠", type: "number" },
   { key: "score_threshold", label: "分数阈值", type: "number" },
   { key: "query_expand", label: "查询扩展", type: "boolean" },
+  { key: "query_expand_threshold", label: "扩展触发阈值(字符)", type: "number" },
   { key: "hybrid_search", label: "混合搜索", type: "boolean" },
 ]
 
@@ -160,4 +248,72 @@ async function saveConfig() {
     saving.value = false
   }
 }
+
+// ── 缓存管理 ──
+
+async function loadKeywords() {
+  keywordsLoading.value = true
+  try {
+    keywords.value = await getCacheKeywords()
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    keywordsLoading.value = false
+  }
+}
+
+function editKeyword(key: string, expansions: string[]) {
+  editingKeyword.value = key
+  newKeyword.value = key
+  newExpansionsInput.value = expansions.join("，")
+}
+
+function cancelEdit() {
+  editingKeyword.value = null
+  newKeyword.value = ""
+  newExpansionsInput.value = ""
+}
+
+async function addKeyword() {
+  const keyword = newKeyword.value.trim()
+  const raw = newExpansionsInput.value.trim()
+  if (!keyword || !raw) return
+  const expansions = raw.split(/[，,、]/).map((s) => s.trim()).filter(Boolean)
+  if (expansions.length === 0) return
+
+  try {
+    await putCacheKeyword(keyword, expansions)
+    if (editingKeyword.value && editingKeyword.value !== keyword) {
+      await deleteCacheKeyword(editingKeyword.value).catch(() => {})
+    }
+    await loadKeywords()
+    cancelEdit()
+  } catch (e: any) {
+    error.value = e.message
+  }
+}
+
+async function removeKeyword(keyword: string) {
+  if (!confirm(`删除「${keyword}」的缓存规则？`)) return
+  try {
+    await deleteCacheKeyword(keyword)
+    await loadKeywords()
+  } catch (e: any) {
+    error.value = e.message
+  }
+}
+
+async function clearCache() {
+  if (!confirm("清除所有短期缓存？")) return
+  try {
+    await clearShortCache()
+  } catch (e: any) {
+    error.value = e.message
+  }
+}
+
+// 认证后自动加载关键词
+watch(authenticated, (val) => {
+  if (val) loadKeywords()
+})
 </script>

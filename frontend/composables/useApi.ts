@@ -117,6 +117,35 @@ export function useApi() {
     })
   }
 
+  // ── 缓存管理 ──
+  async function getCacheKeywords(): Promise<Record<string, { expansions: string[] }>> {
+    return request<any>("/api/admin/cache/keywords", {
+      headers: authHeaders(),
+    })
+  }
+
+  async function putCacheKeyword(keyword: string, expansions: string[]) {
+    return request<any>("/api/admin/cache/keywords", {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({ keyword, expansions }),
+    })
+  }
+
+  async function deleteCacheKeyword(keyword: string) {
+    return request<any>(`/api/admin/cache/keywords/${encodeURIComponent(keyword)}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    })
+  }
+
+  async function clearShortCache() {
+    return request<any>("/api/admin/cache/clear", {
+      method: "POST",
+      headers: authHeaders(),
+    })
+  }
+
   return {
     setAdminKey,
     getAdminKey,
@@ -128,5 +157,9 @@ export function useApi() {
     indexArticle,
     deleteArticle,
     batchIndex,
+    getCacheKeywords,
+    putCacheKeyword,
+    deleteCacheKeyword,
+    clearShortCache,
   }
 }

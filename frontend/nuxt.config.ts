@@ -4,7 +4,7 @@ export default defineNuxtConfig({
   nitro: {
     devProxy: {
       "/api": {
-        target: process.env.API_BASE_URL || "http://localhost:8787/",
+        target: process.env.API_BASE_URL || "http://localhost:8787",
         changeOrigin: true,
       },
     },

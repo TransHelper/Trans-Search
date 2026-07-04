@@ -24,6 +24,9 @@ export async function embed(text: string, env: Env, cfg: Config): Promise<number
 export async function expandQuery(q: string, env: Env, cfg: Config): Promise<string> {
   if (!cfg.query_expand) return q
 
+  // 如果查询足够详细（超过字符阈值），跳过 LLM 扩展
+  if (q.length > cfg.query_expand_threshold) return q
+
   const safeQ = q.slice(0, 100).replace(/[^\w\s\u4e00-\u9fff，。？！、]/g, "")
   try {
     const resp = await fetch(`${cfg.openai_base_url}chat/completions`, {

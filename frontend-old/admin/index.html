@@ -182,7 +182,7 @@ table.art-table tr:hover td{background:var(--bg)}
 <div class="api-bar">
   <div class="api-dot" id="api-dot"></div>
   <span style="white-space:nowrap">后端：</span>
-  <input type="text" id="api-url" value="http://localhost:8000" style="flex:1;min-width:140px">
+  <input type="text" id="api-url" value="http://localhost:8787" style="flex:1;min-width:140px">
   <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px;white-space:nowrap" onclick="checkApi()">连接</button>
   <span id="api-msg" style="font-size:12px"></span>
   <div class="api-bar-break"></div>
@@ -213,6 +213,9 @@ table.art-table tr:hover td{background:var(--bg)}
     <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M16 12l-4-4-4 4M12 8v8"/></svg>批量上传
   </div>
 
+  <div class="nav-item" onclick="switchTab('cache',this)">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/><rect x="4" y="7" width="16" height="13" rx="2"/></svg>缓存管理
+  </div>
   <div class="nav-item" onclick="switchTab('settings',this)">
     <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>系统配置
   </div>
@@ -394,6 +397,13 @@ table.art-table tr:hover td{background:var(--bg)}
       </div>
       <label class="toggle-switch"><input type="checkbox" id="cfg-query-expand"><span class="toggle-track"></span></label>
     </div>
+    <div class="form-row" style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:13px;font-weight:500">扩展触发阈值（字符）</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">搜索词超过此长度时不调用 LLM 扩展，直接原词搜索</div>
+      </div>
+      <input type="text" id="cfg-expand-threshold" style="width:60px;text-align:center" placeholder="15">
+    </div>
     <hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
     <div class="form-row" style="display:flex;align-items:center;justify-content:space-between">
       <div>
@@ -408,6 +418,42 @@ table.art-table tr:hover td{background:var(--bg)}
     <button class="btn btn-ghost" onclick="loadConfig()">重置为当前值</button>
     <button class="btn btn-ghost" onclick="testLlmApi()" id="test-api-btn">🔌 测试 API 可用性</button>
     <span id="cfg-result" style="font-size:13px"></span>
+  </div>
+</div>
+
+<!-- 缓存管理 -->
+<div class="tab-wrap" id="tab-cache">
+  <div class="page-header"><div class="page-title">缓存管理</div><div class="page-sub">高频词长期缓存 + 搜索结果短期缓存</div></div>
+
+  <!-- 长期缓存 -->
+  <div class="card">
+    <div class="card-title">
+      <div class="card-title-left"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 12h6M12 9v6"/></svg>高频词长期缓存</div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      预设高频关键词及扩展词，命中后跳过 LLM 扩展，直接用扩展词联合检索。存储在 KV，永久有效。
+    </p>
+    <!-- 添加/编辑 -->
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;padding:12px;background:var(--bg);border-radius:8px">
+      <input type="text" id="cache-keyword" placeholder="关键词（如 HRT）" style="flex:1;min-width:120px">
+      <input type="text" id="cache-expansions" placeholder="扩展词（逗号分隔）" style="flex:2;min-width:200px">
+      <button class="btn btn-primary" id="cache-add-btn" onclick="addCacheKeyword()">添加</button>
+      <button class="btn btn-ghost" id="cache-cancel-btn" style="display:none" onclick="cancelCacheEdit()">取消</button>
+      <span id="cache-status" style="font-size:12px;color:var(--muted);align-self:center"></span>
+    </div>
+    <!-- 关键词列表 -->
+    <div id="cache-keyword-list"><div class="empty">加载中…</div></div>
+  </div>
+
+  <!-- 短期缓存 -->
+  <div class="card">
+    <div class="card-title">
+      <div class="card-title-left"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>短期缓存（内存）</div>
+      <button class="btn btn-danger btn-sm" onclick="clearShortCache()">清除全部</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted)">
+      搜索结果自动缓存 5 分钟，重复搜索直接从内存返回（约 0.1 秒）。刷新页面后自动清空。
+    </p>
   </div>
 </div>
 
@@ -504,6 +550,7 @@ function switchTab(name, navEl){
   if(name==='overview') loadStats();
   if(name==='tree-edit') loadTreeEditor();
   if(name==='articles') loadArticles();
+  if(name==='cache') loadCachePage();
   if(name==='settings') loadConfig();
 }
 
@@ -1155,6 +1202,7 @@ async function loadConfig(){
     document.getElementById('cfg-chunk-overlap').value=d.chunk_overlap||'';
     document.getElementById('cfg-threshold').value=d.score_threshold||'';
     document.getElementById('cfg-query-expand').checked=!!d.query_expand;
+    document.getElementById('cfg-expand-threshold').value=d.query_expand_threshold??'';
     document.getElementById('cfg-hybrid').checked=!!d.hybrid_search;
     document.getElementById('cfg-result').textContent='';
   }catch(e){ document.getElementById('cfg-result').textContent='加载失败：'+e.message; }
@@ -1169,8 +1217,9 @@ async function saveConfig(){
     chunk_size:      parseInt(document.getElementById('cfg-chunk-size').value)||null,
     chunk_overlap:   parseInt(document.getElementById('cfg-chunk-overlap').value)||null,
     score_threshold: parseFloat(document.getElementById('cfg-threshold').value)||null,
-    query_expand:    document.getElementById('cfg-query-expand').checked,
-    hybrid_search:   document.getElementById('cfg-hybrid').checked,
+    query_expand:           document.getElementById('cfg-query-expand').checked,
+    query_expand_threshold: parseInt(document.getElementById('cfg-expand-threshold').value) || null,
+    hybrid_search:          document.getElementById('cfg-hybrid').checked,
   };
   const res=document.getElementById('cfg-result');
   res.textContent='保存中…'; res.style.color='var(--muted)';
@@ -1203,6 +1252,130 @@ async function testLlmApi(){
   btn.disabled=false;
 }
 
+// ═══════════════════════════════════════════
+// 缓存管理
+// ═══════════════════════════════════════════
+
+let _editingCacheKeyword = null
+
+async function loadCachePage() {
+  document.getElementById('cache-status').textContent = ''
+  await loadCacheKeywords()
+}
+
+async function loadCacheKeywords() {
+  const list = document.getElementById('cache-keyword-list')
+  list.innerHTML = '<div class="empty">加载中…</div>'
+  try {
+    const r = await fetch(apiBase() + '/admin/cache/keywords', { headers: adminHeaders() })
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    const data = await r.json()
+    const keys = Object.keys(data)
+    if (keys.length === 0) {
+      list.innerHTML = '<div class="empty">暂无高频词缓存</div>'
+      return
+    }
+    list.innerHTML = ''
+    for (const key of keys) {
+      const entry = data[key]
+      const div = document.createElement('div')
+      div.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px'
+      div.innerHTML = `
+        <div style="flex:1;min-width:0">
+          <span style="font-family:monospace;font-size:13px;font-weight:600;color:var(--text)">${esc(key)}</span>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">↳ ${esc(entry.expansions.join('、'))}</div>
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          <button class="btn btn-ghost btn-sm" onclick="editCacheKeyword('${esc(key)}','${esc(entry.expansions.join(','))}')">编辑</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCacheKeyword('${esc(key)}')">删除</button>
+        </div>
+      `
+      list.appendChild(div)
+    }
+  } catch (e) {
+    list.innerHTML = `<div class="empty" style="color:var(--red)">加载失败：${esc(e.message)}</div>`
+  }
+}
+
+function editCacheKeyword(key, expansionsStr) {
+  _editingCacheKeyword = key
+  document.getElementById('cache-keyword').value = key
+  document.getElementById('cache-expansions').value = expansionsStr.replace(/,/g, '，')
+  document.getElementById('cache-add-btn').textContent = '更新'
+  document.getElementById('cache-cancel-btn').style.display = ''
+}
+
+function cancelCacheEdit() {
+  _editingCacheKeyword = null
+  document.getElementById('cache-keyword').value = ''
+  document.getElementById('cache-expansions').value = ''
+  document.getElementById('cache-add-btn').textContent = '添加'
+  document.getElementById('cache-cancel-btn').style.display = 'none'
+  document.getElementById('cache-status').textContent = ''
+}
+
+async function addCacheKeyword() {
+  const keyword = document.getElementById('cache-keyword').value.trim()
+  const raw = document.getElementById('cache-expansions').value.trim()
+  if (!keyword || !raw) return
+  const expansions = raw.split(/[，,、]/).map(s => s.trim()).filter(Boolean)
+  if (expansions.length === 0) return
+
+  const status = document.getElementById('cache-status')
+  status.textContent = '保存中…'
+  try {
+    const r = await fetch(apiBase() + '/admin/cache/keywords', {
+      method: 'PUT',
+      headers: adminHeaders(),
+      body: JSON.stringify({ keyword, expansions }),
+    })
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    // 如果编辑时改了关键词，删除旧 key
+    if (_editingCacheKeyword && _editingCacheKeyword !== keyword) {
+      await fetch(apiBase() + '/admin/cache/keywords/' + encodeURIComponent(_editingCacheKeyword), {
+        method: 'DELETE', headers: adminHeaders(),
+      }).catch(() => {})
+    }
+    status.textContent = '✓ 已保存'
+    status.style.color = 'var(--green)'
+    cancelCacheEdit()
+    await loadCacheKeywords()
+  } catch (e) {
+    status.textContent = '✗ ' + e.message
+    status.style.color = 'var(--red)'
+  }
+}
+
+async function deleteCacheKeyword(keyword) {
+  if (!confirm(`删除「${keyword}」的缓存规则？`)) return
+  const status = document.getElementById('cache-status')
+  try {
+    const r = await fetch(apiBase() + '/admin/cache/keywords/' + encodeURIComponent(keyword), {
+      method: 'DELETE', headers: adminHeaders(),
+    })
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    status.textContent = '✓ 已删除'
+    status.style.color = 'var(--green)'
+    await loadCacheKeywords()
+  } catch (e) {
+    status.textContent = '✗ ' + e.message
+    status.style.color = 'var(--red)'
+  }
+}
+
+async function clearShortCache() {
+  if (!confirm('清除所有短期缓存？')) return
+  try {
+    const r = await fetch(apiBase() + '/admin/cache/clear', {
+      method: 'POST', headers: adminHeaders(),
+    })
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    alert('短期缓存已清除')
+  } catch (e) {
+    alert('清除失败：' + e.message)
+  }
+}
+
 // 移动端侧边栏
 function toggleMobSidebar(){
   const sb=document.getElementById('admin-sidebar');
@@ -1216,7 +1389,16 @@ function closeMobSidebar(){
 }
 
 // 初始化
-(function(){const k=localStorage.getItem('adminKey');if(k)document.getElementById('admin-key').value=k;})();
+(function(){
+  const k=localStorage.getItem('adminKey');
+  if(k) document.getElementById('admin-key').value=k;
+  const url=localStorage.getItem('apiUrl');
+  if(url) document.getElementById('api-url').value=url;
+})();
+// API URL 变更时持久化
+document.getElementById('api-url').addEventListener('input', function(){
+  localStorage.setItem('apiUrl', this.value);
+});
 checkApi();
 </script>
 </body>

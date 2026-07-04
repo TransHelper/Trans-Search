@@ -16,3 +16,5 @@ RERANKER_API_KEY=your_reranker_api_key
 # EMBED_MODEL=embedding-3
 # CHAT_MODEL=glm-4.7-flash
 # EMBED_DIM=2048
+# QUERY_EXPAND=true
+# QUERY_EXPAND_THRESHOLD=15

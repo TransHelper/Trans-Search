@@ -13,6 +13,7 @@ export interface Env {
   CHUNK_OVERLAP?: string
   SCORE_THRESHOLD?: string
   QUERY_EXPAND?: string
+  QUERY_EXPAND_THRESHOLD?: string
   HYBRID_SEARCH?: string
   SEARCH_MAX_LEN?: string
   CONTENT_MAX_LEN?: string
@@ -70,6 +71,7 @@ export interface ConfigUpdate {
   chunk_overlap?: number
   score_threshold?: number
   query_expand?: boolean
+  query_expand_threshold?: number
   hybrid_search?: boolean
   reranker_base_url?: string
   rerank_model?: string

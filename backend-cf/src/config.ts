@@ -18,6 +18,7 @@ export class Config {
   chunk_overlap: number
   score_threshold: number
   query_expand: boolean
+  query_expand_threshold: number
   hybrid_search: boolean
   reranker_base_url: string
   rerank_model: string
@@ -32,6 +33,7 @@ export class Config {
     this.chunk_overlap = parseInt(env.CHUNK_OVERLAP ?? "80", 10)
     this.score_threshold = parseFloat(env.SCORE_THRESHOLD ?? "0.25")
     this.query_expand = (env.QUERY_EXPAND ?? "true").toLowerCase() === "true"
+    this.query_expand_threshold = parseInt(env.QUERY_EXPAND_THRESHOLD ?? "15", 10)
     this.hybrid_search = (env.HYBRID_SEARCH ?? "true").toLowerCase() === "true"
     this.reranker_base_url = env.RERANKER_BASE_URL ?? "https://api.siliconflow.cn/v1/"
     this.rerank_model = env.RERANK_MODEL ?? "BAAI/bge-reranker-v2-m3"
@@ -47,6 +49,7 @@ export class Config {
     if (update.chunk_overlap !== undefined) this.chunk_overlap = update.chunk_overlap
     if (update.score_threshold !== undefined) this.score_threshold = update.score_threshold
     if (update.query_expand !== undefined) this.query_expand = update.query_expand
+    if (update.query_expand_threshold !== undefined) this.query_expand_threshold = update.query_expand_threshold
     if (update.hybrid_search !== undefined) this.hybrid_search = update.hybrid_search
     if (update.reranker_base_url !== undefined) this.reranker_base_url = update.reranker_base_url
     if (update.rerank_model !== undefined) this.rerank_model = update.rerank_model
@@ -61,6 +64,7 @@ export class Config {
       chunk_overlap: this.chunk_overlap,
       score_threshold: this.score_threshold,
       query_expand: this.query_expand,
+      query_expand_threshold: this.query_expand_threshold,
       hybrid_search: this.hybrid_search,
       rerank_model: this.rerank_model,
       rerank_enabled: this.rerank_enabled,

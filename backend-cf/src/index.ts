@@ -23,9 +23,20 @@ import {
   ArticleMeta,
   ConfigUpdate,
   Env,
+  QdrantSearchResult,
   SearchResult,
   VALID_FLAGS,
 } from "./types"
+import {
+  getKeywordExpansions,
+  getShortTermCache,
+  setShortTermCache,
+  getLongTermCache,
+  setLongTermCache,
+  clearShortTermCache,
+  LongTermCache,
+  KeywordEntry,
+} from "./cache"
 
 const RATE_LIMITS = {
   search: { limit: 30, window: 60 },
@@ -44,7 +55,7 @@ app.use(
       if (allowed.includes(origin)) return origin
       return allowed[0] ?? ""
     },
-    allowMethods: ["GET", "POST", "PATCH", "DELETE"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowHeaders: ["Content-Type", "X-Admin-Key"],
     exposeHeaders: ["X-Expanded-Query"],
   }),
@@ -75,47 +86,37 @@ app.onError((err, c) => {
 
 app.get("/health", (c) => c.json({ status: "ok" }))
 
-app.get("/search", async (c) => {
-  const ip = getClientIP(c.req.raw)
-  checkRateLimit("search", ip, RATE_LIMITS.search.limit, RATE_LIMITS.search.window)
-
-  const cfg = await loadConfig(c.env)
-  const q = sanitizeQuery(c.req.query("q") ?? "", parseInt(c.env.SEARCH_MAX_LEN ?? "200", 10))
-  const category = c.req.query("category") ?? null
-  const sourceSite = c.req.query("source_site") ?? null
-  const chapter = c.req.query("chapter") ?? null
-  const tags = parseTagList(c.req.query("tags") ?? null)
-  const topK = Math.min(Math.max(parseInt(c.req.query("top_k") ?? "8", 10) || 8, 1), 20)
-  const rerankTopK = Math.min(topK * 2, 40)
-
-  const qfilter = buildFilter(category, tags, sourceSite, chapter)
-
-  const expandedQ = await expandQuery(q, c.env, cfg)
-  const [queryVector, querySparse] = await Promise.all([
-    embed(expandedQ, c.env, cfg),
-    textToSparse(expandedQ),
+async function searchQdrant(
+  queryText: string,
+  env: Env,
+  cfg: Config,
+  qfilter: unknown,
+  rerankTopK: number,
+): Promise<QdrantSearchResult[]> {
+  const [vec, sparse] = await Promise.all([
+    embed(queryText, env, cfg),
+    textToSparse(queryText),
   ])
-
-  let hits
   if (cfg.hybrid_search) {
-    hits = await queryPoints(c.env, {
+    return queryPoints(env, {
       prefetch: [
-        { query: queryVector, using: "dense", filter: qfilter, limit: rerankTopK * 4 },
-        { query: querySparse, using: "sparse", filter: qfilter, limit: rerankTopK * 4 },
+        { query: vec, using: "dense", filter: qfilter, limit: rerankTopK * 4 },
+        { query: sparse, using: "sparse", filter: qfilter, limit: rerankTopK * 4 },
       ],
       query: { fusion: "rrf" },
       limit: rerankTopK * 3,
     })
-  } else {
-    hits = await queryPoints(c.env, {
-      query: queryVector,
-      using: "dense",
-      filter: qfilter,
-      limit: rerankTopK * 3,
-      scoreThreshold: cfg.score_threshold,
-    })
   }
+  return queryPoints(env, {
+    query: vec,
+    using: "dense",
+    filter: qfilter,
+    limit: rerankTopK * 3,
+    scoreThreshold: cfg.score_threshold,
+  })
+}
 
+function hitsToResults(hits: QdrantSearchResult[], rerankTopK: number): SearchResult[] {
   const seen = new Map<string, SearchResult>()
   for (const h of hits) {
     const p = h.payload
@@ -137,8 +138,77 @@ app.get("/search", async (c) => {
     })
     if (seen.size >= rerankTopK) break
   }
+  return Array.from(seen.values())
+}
 
-  let results = Array.from(seen.values())
+app.get("/search", async (c) => {
+  const ip = getClientIP(c.req.raw)
+  checkRateLimit("search", ip, RATE_LIMITS.search.limit, RATE_LIMITS.search.window)
+
+  const cfg = await loadConfig(c.env)
+  const q = sanitizeQuery(c.req.query("q") ?? "", parseInt(c.env.SEARCH_MAX_LEN ?? "200", 10))
+  const category = c.req.query("category") ?? null
+  const sourceSite = c.req.query("source_site") ?? null
+  const chapter = c.req.query("chapter") ?? null
+  const tags = parseTagList(c.req.query("tags") ?? null)
+  const topK = Math.min(Math.max(parseInt(c.req.query("top_k") ?? "8", 10) || 8, 1), 20)
+  const rerankTopK = Math.min(Math.ceil(topK * 1.5), 40)
+
+  const qfilter = buildFilter(category, tags, sourceSite, chapter)
+
+  // ── 缓存检查：长/短期 ──
+  // 1. 短期缓存（内存，5分钟 TTL）
+  const shortHit = getShortTermCache(q)
+  if (shortHit) {
+    return c.json(shortHit.results.slice(0, topK), 200, {
+      "X-Expanded-Query": encodeURIComponent(shortHit.expandedQuery),
+      "X-Cache": "short-term",
+    })
+  }
+
+  // 2. 长期缓存（管理员预设的关键词扩展）
+  const longTermExpansions = cfg.query_expand ? await getKeywordExpansions(q, c.env) : null
+  if (longTermExpansions && longTermExpansions.length > 0) {
+    // 用预设扩展词替换 LLM 扩展：原词 + 扩展词联合搜索
+    const extendedQuery = `${q}，${longTermExpansions.join("，")}`
+    const hits = await searchQdrant(extendedQuery, c.env, cfg, qfilter, rerankTopK)
+    let results = hitsToResults(hits, rerankTopK).slice(0, topK)
+    // 存入短期缓存
+    setShortTermCache(q, results, extendedQuery)
+    return c.json(results, 200, {
+      "X-Expanded-Query": encodeURIComponent(extendedQuery),
+      "X-Cache": "long-term",
+    })
+  }
+
+  // ── 缓存未命中：并行搜索 ──
+  // Path A: 原词立即搜索（不等 LLM 扩展）
+  const pathA = searchQdrant(q, c.env, cfg, qfilter, rerankTopK)
+
+  // Path B: LLM 异步扩展搜索（如果开启且查询足够简短）
+  const pathB = (async () => {
+    if (!cfg.query_expand) return null
+    if (q.length > cfg.query_expand_threshold) return null
+    const expandedQ = await expandQuery(q, c.env, cfg)
+    if (expandedQ === q) return null
+    return searchQdrant(expandedQ, c.env, cfg, qfilter, rerankTopK)
+  })()
+
+  const [hitsA, hitsB] = await Promise.all([pathA, pathB])
+
+  // 合并结果：Path A 优先，Path B 补充去重
+  const merged = hitsToResults(hitsA, rerankTopK)
+  if (hitsB) {
+    const existingIds = new Set(merged.map((r) => r.article_id))
+    for (const r of hitsToResults(hitsB, rerankTopK)) {
+      if (!existingIds.has(r.article_id) && merged.length < rerankTopK) {
+        merged.push(r)
+        existingIds.add(r.article_id)
+      }
+    }
+  }
+
+  let results = merged
 
   // ── Rerank: 重新排序，取前 topK 个 ──
   if (cfg.rerank_enabled) {
@@ -163,8 +233,12 @@ app.get("/search", async (c) => {
     results = results.slice(0, topK)
   }
 
+  // 存入短期缓存
+  setShortTermCache(q, results, q)
+
   return c.json(results, 200, {
-    "X-Expanded-Query": encodeURIComponent(expandedQ),
+    "X-Expanded-Query": encodeURIComponent(q),
+    "X-Cache": "miss",
   })
   })
 
@@ -274,6 +348,62 @@ app.patch("/config", async (c) => {
 
   const cfg = await saveConfig(c.env, update)
   return c.json(cfg.toJSON())
+})
+
+// ── 缓存管理 API（需 Admin Key）─────────────
+
+app.get("/admin/cache/keywords", async (c) => {
+  const ip = getClientIP(c.req.raw)
+  checkRateLimit("config", ip, RATE_LIMITS.config.limit, RATE_LIMITS.config.window)
+  requireAdmin(c.req.header("X-Admin-Key"), c.env)
+  const cache = await getLongTermCache(c.env)
+  return c.json(cache)
+})
+
+app.put("/admin/cache/keywords", async (c) => {
+  const ip = getClientIP(c.req.raw)
+  checkRateLimit("config", ip, RATE_LIMITS.config.limit, RATE_LIMITS.config.window)
+  requireAdmin(c.req.header("X-Admin-Key"), c.env)
+  const body = await c.req.json<{ keyword: string; expansions: string[] }>()
+  if (!body.keyword?.trim()) return c.json({ detail: "keyword is required" }, 400)
+  if (!body.expansions?.length) return c.json({ detail: "expansions must be a non-empty array" }, 400)
+  const cache = await getLongTermCache(c.env)
+  // 统一转小写存储，实现大小写不敏感
+  const lowerKey = body.keyword.trim().toLowerCase()
+  // 如果原 key 存在且不同大小写，先删除旧的
+  for (const k of Object.keys(cache)) {
+    if (k.toLowerCase() === lowerKey && k !== lowerKey) {
+      delete cache[k]
+    }
+  }
+  cache[lowerKey] = { expansions: body.expansions }
+  await setLongTermCache(c.env, cache)
+  return c.json({ updated: lowerKey, expansions: body.expansions })
+})
+
+app.delete("/admin/cache/keywords/:keyword", async (c) => {
+  const ip = getClientIP(c.req.raw)
+  checkRateLimit("config", ip, RATE_LIMITS.config.limit, RATE_LIMITS.config.window)
+  requireAdmin(c.req.header("X-Admin-Key"), c.env)
+  const keyword = c.req.param("keyword").toLowerCase()
+  const cache = await getLongTermCache(c.env)
+  // 大小写不敏感查找
+  let foundKey: string | null = null
+  for (const k of Object.keys(cache)) {
+    if (k.toLowerCase() === keyword) { foundKey = k; break }
+  }
+  if (!foundKey) return c.json({ detail: "keyword not found" }, 404)
+  delete cache[foundKey]
+  await setLongTermCache(c.env, cache)
+  return c.json({ deleted: foundKey })
+})
+
+app.post("/admin/cache/clear", async (c) => {
+  const ip = getClientIP(c.req.raw)
+  checkRateLimit("config", ip, RATE_LIMITS.config.limit, RATE_LIMITS.config.window)
+  requireAdmin(c.req.header("X-Admin-Key"), c.env)
+  clearShortTermCache()
+  return c.json({ cleared: true })
 })
 
 function validateArticle(a: ArticleInput, env: Env) {

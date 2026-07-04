@@ -91,6 +91,7 @@ DEFAULT_CONFIG = {
     "chunk_overlap": int(os.getenv("CHUNK_OVERLAP", "80")),
     "score_threshold": float(os.getenv("SCORE_THRESHOLD", "0.25")),
     "query_expand": os.getenv("QUERY_EXPAND", "true").lower() == "true",
+    "query_expand_threshold": int(os.getenv("QUERY_EXPAND_THRESHOLD", "15")),
     "hybrid_search": os.getenv("HYBRID_SEARCH", "false").lower() == "true",
 }
 
@@ -301,6 +302,10 @@ def text_to_sparse(text: str) -> SparseVector:
 def expand_query(q: str) -> str:
     if not cfg.get("query_expand"):
         return q
+    # 如果查询足够详细（超过字符阈值），跳过 LLM 扩展
+    threshold = cfg.get("query_expand_threshold", 20)
+    if len(q) > threshold:
+        return q
     # 防 prompt injection：只取前 100 字，去除换行和特殊字符
     safe_q = re.sub(r"[^\w\s\u4e00-\u9fff，。？！、]", "", q[:100])
     try:
@@ -450,6 +455,7 @@ class ConfigUpdate(BaseModel):
     chunk_overlap: int | None = None
     score_threshold: float | None = None
     query_expand: bool | None = None
+    query_expand_threshold: int | None = None
     hybrid_search: bool | None = None
 
     @field_validator("openai_base_url")
@@ -641,6 +647,7 @@ def stats(request: Request):
         "embed_model": cfg["embed_model"],
         "chat_model": cfg["chat_model"],
         "query_expand": cfg["query_expand"],
+        "query_expand_threshold": cfg["query_expand_threshold"],
         "hybrid_search": cfg["hybrid_search"],
         "chunk_size": cfg["chunk_size"],
         "score_threshold": cfg["score_threshold"],

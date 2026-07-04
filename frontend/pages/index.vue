@@ -1,4 +1,5 @@
 <template>
+  <div class="search-page">
   <div class="max-w-4xl mx-auto px-4 py-8">
     <div class="mb-8">
       <h1 class="text-2xl font-bold mb-2">跨性别信息聚合搜索</h1>
@@ -65,7 +66,9 @@
     </div>
 
     <div v-if="results.length > 0" class="space-y-4">
-      <p class="text-sm text-gray-400 mb-2">共 {{ results.length }} 条结果</p>
+      <p class="text-sm text-gray-400 mb-2">共 {{ results.length }} 条结果
+        <span class="ml-2 text-xs text-gray-300">本次搜索 {{ searchTimeText }}</span>
+      </p>
       <div
         v-for="r in results"
         :key="r.article_id"
@@ -92,6 +95,7 @@
       没有找到相关结果
     </div>
   </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -101,6 +105,12 @@ const loading = ref(false)
 const results = ref<any[]>([])
 const error = ref("")
 const expandedQuery = ref<string | null>(null)
+const searchTime = ref(0)
+const searchTimeText = computed(() => {
+  const ms = searchTime.value
+  if (ms < 1000) return `${ms} ms`
+  return `${(ms / 1000).toFixed(2)} s`
+})
 
 const filters = reactive({
   category: "",
@@ -117,6 +127,8 @@ async function doSearch() {
   error.value = ""
   results.value = []
   expandedQuery.value = null
+  searchTime.value = 0
+  const start = performance.now()
   try {
     const res = await search({
       q,
@@ -131,7 +143,29 @@ async function doSearch() {
   } catch (e: any) {
     error.value = e.message
   } finally {
+    searchTime.value = Math.round(performance.now() - start)
     loading.value = false
   }
 }
 </script>
+
+<style scoped>
+@media (max-width: 640px) {
+  .search-page :deep(.px-4) { padding-left: 12px; padding-right: 12px; }
+  .search-page :deep(.py-8) { padding-top: 16px; padding-bottom: 16px; }
+  .search-page :deep(.text-2xl) { font-size: 1.25rem; }
+  .search-page :deep(.p-4) { padding: 12px; }
+  .search-page :deep(.py-2\\.5) { padding-top: 10px; padding-bottom: 10px; }
+  .search-page :deep(.px-6) { padding-left: 14px; padding-right: 14px; }
+  .search-page :deep(.flex-wrap.gap-2) input,
+  .search-page :deep(.flex-wrap.gap-2) select {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    width: auto;
+  }
+  .search-page :deep(.w-28),
+  .search-page :deep(.w-32),
+  .search-page :deep(.w-40) { width: auto; }
+  .search-page :deep(.p-5) { padding: 14px; }
+}
+</style>
