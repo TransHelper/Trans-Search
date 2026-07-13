@@ -2,7 +2,7 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: ["@nuxtjs/tailwindcss"],
   nitro: {
-    preset: "cloudflare_module",
+    preset: "cloudflare_module"
     devProxy: {
       "/api": {
         target: process.env.API_BASE_URL || "http://localhost:8787",
