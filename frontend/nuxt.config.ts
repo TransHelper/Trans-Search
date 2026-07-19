@@ -6,7 +6,7 @@ export default defineNuxtConfig({
     preset: "cloudflare_module",
     devProxy: {
       "/api": {
-        target: process.env.API_BASE_URL || "http://localhost:8787",
+        target: process.env.API_BASE_URL || "https://search-api.transhelper.org",
         changeOrigin: true,
       },
     },
