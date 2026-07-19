@@ -61,7 +61,12 @@
       {{ error }}
     </div>
 
-    <div v-if="expandedQuery" class="mb-4 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+    <div v-if="scopeLabel" class="mb-4 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700 flex items-center justify-between">
+      <span>当前范围：<span class="font-medium">{{ scopeLabel }}</span>（来自知识树）</span>
+      <button class="text-blue-500 hover:underline shrink-0 ml-3" @click="clearScope">清除</button>
+    </div>
+
+    <div v-if="expandedQuery && expandedQuery !== query" class="mb-4 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
       扩展搜索词：<span class="font-medium">{{ expandedQuery }}</span>
     </div>
 
@@ -118,6 +123,34 @@ const filters = reactive({
   chapter: "",
   tags: "",
   top_k: 8,
+})
+
+const route = useRoute()
+const router = useRouter()
+
+const scopeLabel = computed(() => {
+  const parts = [filters.source_site, filters.category, filters.chapter].filter(Boolean)
+  return parts.join(" › ")
+})
+
+function clearScope() {
+  filters.source_site = ""
+  filters.category = ""
+  filters.chapter = ""
+  router.replace({ path: "/", query: query.value ? { q: query.value } : {} })
+  if (query.value) doSearch()
+}
+
+// 从知识树跳转过来时，带上范围筛选（source_site/category/chapter）与可选的查询词（q）
+onMounted(() => {
+  const q = route.query
+  if (typeof q.source_site === "string") filters.source_site = q.source_site
+  if (typeof q.category === "string") filters.category = q.category
+  if (typeof q.chapter === "string") filters.chapter = q.chapter
+  if (typeof q.q === "string" && q.q) {
+    query.value = q.q
+    doSearch()
+  }
 })
 
 async function doSearch() {
