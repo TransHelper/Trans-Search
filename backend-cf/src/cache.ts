@@ -23,17 +23,22 @@ export async function setLongTermCache(env: Env, cache: LongTermCache): Promise<
   await env.CONFIG_KV.put(KV_KEY, JSON.stringify(cache))
 }
 
-/** 查询某个关键词是否有管理员预设的扩展词 */
+/** 查询搜索词中是否包含管理员预设的高频词，命中则合并返回这些词的扩展词（去重） */
 export async function getKeywordExpansions(q: string, env: Env): Promise<string[] | null> {
   const cache = await getLongTermCache(env)
-  // 大小写不敏感：统一转小写匹配
+  // 大小写不敏感：统一转小写做"包含"匹配（而非要求整词完全相等）
   const lowerQ = q.toLowerCase()
+  const matched: string[] = []
   for (const key of Object.keys(cache)) {
-    if (key.toLowerCase() === lowerQ) {
-      return cache[key].expansions
+    const lowerKey = key.toLowerCase()
+    if (!lowerKey) continue
+    if (lowerQ.includes(lowerKey)) {
+      for (const exp of cache[key].expansions) {
+        if (!matched.includes(exp)) matched.push(exp)
+      }
     }
   }
-  return null
+  return matched.length > 0 ? matched : null
 }
 
 // ════════════════════════════════════════
