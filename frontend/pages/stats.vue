@@ -7,6 +7,14 @@
 
     <div v-if="stats" class="grid grid-cols-2 md:grid-cols-3 gap-4">
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <p class="text-2xl font-bold text-primary-600">{{ stats.searches_today ?? "—" }}</p>
+        <p class="text-xs text-gray-400 mt-1">今日搜索次数</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <p class="text-2xl font-bold text-primary-600">{{ stats.searches_this_month ?? "—" }}</p>
+        <p class="text-xs text-gray-400 mt-1">本月搜索次数</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
         <p class="text-2xl font-bold text-primary-600">{{ stats.total_chunks ?? "—" }}</p>
         <p class="text-xs text-gray-400 mt-1">总数据块数</p>
       </div>

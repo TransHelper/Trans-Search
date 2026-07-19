@@ -37,6 +37,7 @@ import {
   LongTermCache,
   KeywordEntry,
 } from "./cache"
+import { recordSearch, getSearchStats } from "./stats"
 
 const RATE_LIMITS = {
   search: { limit: 30, window: 60 },
@@ -144,6 +145,7 @@ function hitsToResults(hits: QdrantSearchResult[], rerankTopK: number): SearchRe
 app.get("/search", async (c) => {
   const ip = getClientIP(c.req.raw)
   checkRateLimit("search", ip, RATE_LIMITS.search.limit, RATE_LIMITS.search.window)
+  c.executionCtx.waitUntil(recordSearch(c.env))
 
   const cfg = await loadConfig(c.env)
   const q = sanitizeQuery(c.req.query("q") ?? "", parseInt(c.env.SEARCH_MAX_LEN ?? "200", 10))
@@ -258,7 +260,10 @@ app.get("/tree", async (c) => {
       const p = point.payload
       if (!p) continue
       const aid = p["article_id"] as string | undefined
-      if (aid && (p["chunk_index"] as number) === 0 && !seenArticles.has(aid)) {
+      // 只要该文章有任意一个 chunk 成功入库就应在知识树中可见/可管理，
+      // 不能要求必须存在 chunk_index === 0（否则若该 chunk 缺失/未成功写入，
+      // 文章仍可被搜索到，但在知识树里彻底不可见也无法管理，即"幽灵条目"）。
+      if (aid && !seenArticles.has(aid)) {
         seenArticles.add(aid)
         allPayloads.push(p)
       }
@@ -317,6 +322,7 @@ app.get("/stats", async (c) => {
   checkRateLimit("search", ip, RATE_LIMITS.search.limit, RATE_LIMITS.search.window)
   const cfg = await loadConfig(c.env)
   const info = await getCollectionInfo(c.env)
+  const searchStats = await getSearchStats(c.env)
   return c.json({
     total_chunks: info.points_count,
     embed_model: cfg.embed_model,
@@ -327,6 +333,7 @@ app.get("/stats", async (c) => {
     rerank_enabled: cfg.rerank_enabled,
     chunk_size: cfg.chunk_size,
     score_threshold: cfg.score_threshold,
+    ...searchStats,
   })
 })
 
@@ -443,6 +450,11 @@ app.post("/articles", async (c) => {
   validateArticle(article, c.env)
 
   const articleId = article.id ?? crypto.randomUUID()
+  // 若是显式指定 id 的重新入库（更新文章），先清掉旧的 chunk，
+  // 避免新旧 chunk 混杂、产生孤立/重复的 chunk_index（幽灵条目的另一成因）。
+  if (article.id) {
+    await deletePoints(c.env, { must: [{ key: "article_id", match: { value: article.id } }] })
+  }
   const chunks = splitChunks(article.content, cfg.chunk_size, cfg.chunk_overlap)
   const prefix = buildContextPrefix(article)
   const points: unknown[] = []

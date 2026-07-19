@@ -109,6 +109,14 @@ export function useApi() {
     })
   }
 
+  async function updateArticleMeta(articleId: string, meta: Record<string, unknown>) {
+    return request<any>(`/api/articles/${articleId}/meta`, {
+      method: "PATCH",
+      headers: authHeaders(),
+      body: JSON.stringify(meta),
+    })
+  }
+
   async function batchIndex(articles: Record<string, unknown>[]) {
     return request<any[]>("/api/articles/batch", {
       method: "POST",
@@ -156,6 +164,7 @@ export function useApi() {
     updateConfig,
     indexArticle,
     deleteArticle,
+    updateArticleMeta,
     batchIndex,
     getCacheKeywords,
     putCacheKeyword,
