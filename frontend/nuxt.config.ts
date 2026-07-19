@@ -1,7 +1,9 @@
 export default defineNuxtConfig({
+  compatibilityDate: "2026-07-14",
   devtools: { enabled: true },
   modules: ["@nuxtjs/tailwindcss"],
   nitro: {
+    preset: "cloudflare_module",
     devProxy: {
       "/api": {
         target: process.env.API_BASE_URL || "http://localhost:8787",

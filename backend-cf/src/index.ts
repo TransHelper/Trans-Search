@@ -186,11 +186,13 @@ app.get("/search", async (c) => {
   const pathA = searchQdrant(q, c.env, cfg, qfilter, rerankTopK)
 
   // Path B: LLM 异步扩展搜索（如果开启且查询足够简短）
+  let actualExpandedQuery = q
   const pathB = (async () => {
     if (!cfg.query_expand) return null
     if (q.length > cfg.query_expand_threshold) return null
     const expandedQ = await expandQuery(q, c.env, cfg)
     if (expandedQ === q) return null
+    actualExpandedQuery = expandedQ
     return searchQdrant(expandedQ, c.env, cfg, qfilter, rerankTopK)
   })()
 
@@ -234,10 +236,10 @@ app.get("/search", async (c) => {
   }
 
   // 存入短期缓存
-  setShortTermCache(q, results, q)
+  setShortTermCache(q, results, actualExpandedQuery)
 
   return c.json(results, 200, {
-    "X-Expanded-Query": encodeURIComponent(q),
+    "X-Expanded-Query": encodeURIComponent(actualExpandedQuery),
     "X-Cache": "miss",
   })
   })
