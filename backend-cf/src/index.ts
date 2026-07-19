@@ -142,6 +142,36 @@ function hitsToResults(hits: QdrantSearchResult[], rerankTopK: number): SearchRe
   return Array.from(seen.values())
 }
 
+/** Rerank candidates with the original user query, then take topK. Shared by all search paths. */
+async function finalizeSearchResults(
+  query: string,
+  candidates: SearchResult[],
+  topK: number,
+  env: Env,
+  cfg: Config,
+): Promise<SearchResult[]> {
+  if (!cfg.rerank_enabled) {
+    return candidates.slice(0, topK)
+  }
+  try {
+    const documents = candidates.map((r) => `${r.title}\n${r.excerpt}`)
+    const rerankResults = await rerank(query, documents, env, cfg)
+    const reranked: SearchResult[] = []
+    for (const rr of rerankResults.sort((a, b) => b.relevance_score - a.relevance_score)) {
+      const idx = rr.index
+      if (idx >= 0 && idx < candidates.length) {
+        candidates[idx].score = Math.round(rr.relevance_score * 10000) / 10000
+        reranked.push(candidates[idx])
+      }
+      if (reranked.length >= topK) break
+    }
+    return reranked
+  } catch (e) {
+    console.warn(`Rerank failed, falling back to vector search order: ${e}`)
+    return candidates.slice(0, topK)
+  }
+}
+
 app.get("/search", async (c) => {
   const ip = getClientIP(c.req.raw)
   checkRateLimit("search", ip, RATE_LIMITS.search.limit, RATE_LIMITS.search.window)
@@ -169,13 +199,13 @@ app.get("/search", async (c) => {
   }
 
   // 2. 长期缓存（管理员预设的关键词扩展）
+  // 长期缓存只跳过 LLM 扩展，不跳过 Rerank（与 miss 路径一致）
   const longTermExpansions = cfg.query_expand ? await getKeywordExpansions(q, c.env) : null
   if (longTermExpansions && longTermExpansions.length > 0) {
-    // 用预设扩展词替换 LLM 扩展：原词 + 扩展词联合搜索
     const extendedQuery = `${q}，${longTermExpansions.join("，")}`
     const hits = await searchQdrant(extendedQuery, c.env, cfg, qfilter, rerankTopK)
-    let results = hitsToResults(hits, rerankTopK).slice(0, topK)
-    // 存入短期缓存
+    const candidates = hitsToResults(hits, rerankTopK)
+    const results = await finalizeSearchResults(q, candidates, topK, c.env, cfg)
     setShortTermCache(q, results, extendedQuery)
     return c.json(results, 200, {
       "X-Expanded-Query": encodeURIComponent(extendedQuery),
@@ -212,30 +242,7 @@ app.get("/search", async (c) => {
     }
   }
 
-  let results = merged
-
-  // ── Rerank: 重新排序，取前 topK 个 ──
-  if (cfg.rerank_enabled) {
-  try {
-    const documents = results.map((r) => `${r.title}\n${r.excerpt}`)
-    const rerankResults = await rerank(q, documents, c.env, cfg)
-    const reranked: SearchResult[] = []
-    for (const rr of rerankResults.sort((a, b) => b.relevance_score - a.relevance_score)) {
-      const idx = rr.index
-      if (idx >= 0 && idx < results.length) {
-        results[idx].score = Math.round(rr.relevance_score * 10000) / 10000
-        reranked.push(results[idx])
-      }
-      if (reranked.length >= topK) break
-    }
-    results = reranked
-  } catch (e) {
-    console.warn(`Rerank failed, falling back to vector search order: ${e}`)
-    results = results.slice(0, topK)
-  }
-  } else {
-    results = results.slice(0, topK)
-  }
+  const results = await finalizeSearchResults(q, merged, topK, c.env, cfg)
 
   // 存入短期缓存
   setShortTermCache(q, results, actualExpandedQuery)
@@ -244,7 +251,7 @@ app.get("/search", async (c) => {
     "X-Expanded-Query": encodeURIComponent(actualExpandedQuery),
     "X-Cache": "miss",
   })
-  })
+})
 
 app.get("/tree", async (c) => {
   const ip = getClientIP(c.req.raw)
