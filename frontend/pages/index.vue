@@ -127,7 +127,7 @@
       </div>
     </div>
 
-    <div v-if="!loading && query && results.length === 0 && !error" class="text-center py-16 text-gray-400 dark:text-gray-500">
+    <div v-if="hasSearched && !loading && results.length === 0 && !error" class="text-center py-16 text-gray-400 dark:text-gray-500">
       没有找到相关结果
     </div>
 
@@ -151,6 +151,7 @@ import { nextTick } from "vue"
 const { search } = useApi()
 const query = ref("")
 const loading = ref(false)
+const hasSearched = ref(false)
 const results = ref<any[]>([])
 const error = ref("")
 const expandedQuery = ref<string | null>(null)
@@ -275,9 +276,9 @@ onMounted(() => {
 async function doSearch() {
   const q = query.value.trim()
   if (!q) return
+  hasSearched.value = true
   loading.value = true
   error.value = ""
-  results.value = []
   expandedQuery.value = null
   searchTime.value = 0
   showHistory.value = false

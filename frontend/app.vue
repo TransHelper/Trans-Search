@@ -4,7 +4,7 @@
     <Transition name="fade">
       <div 
         v-if="mobileMenuOpen" 
-        @click="mobileMenuOpen = false" 
+        @click.self="mobileMenuOpen = false" 
         class="fixed inset-0 z-40 md:hidden"
       ></div>
     </Transition>
