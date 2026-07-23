@@ -49,15 +49,17 @@
             :style="{ paddingLeft: `${14 + row.depth * 14}px`, paddingRight: '10px' }"
             @click="toggleExpanded(row.key); selectNode(row)"
           >
-            <svg
-              class="w-3 h-3 text-gray-400 dark:text-gray-500 shrink-0 transition-transform"
-              :class="{ 'rotate-90': expandedKeys.has(row.key) }"
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"
-            ><path stroke-linecap="round" stroke-linejoin="round" d="M9 18l6-6-6-6" /></svg>
+            
+            <Icon 
+              name="mdi:chevron-right" 
+              class="w-3 h-3 text-gray-400 dark:text-gray-500 shrink-0 -mt-px transition-transform" 
+              :class="{ 'rotate-90': expandedKeys.has(row.key) }" 
+            />
 
-            <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path :d="iconPath(row.node.type)" />
-            </svg>
+            <Icon 
+              :name="getIconName(row.node.type)" 
+              class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0 -mt-px" 
+            />
 
             <span class="text-sm truncate" :class="row.depth === 0 ? 'font-semibold text-gray-800 dark:text-gray-200' : (selectedKey === row.key ? 'text-primary-700 dark:text-primary-300 font-medium' : 'text-gray-700 dark:text-gray-300')">{{ row.node.name }}</span>
             <span class="text-xs text-gray-400 dark:text-gray-500 shrink-0">{{ row.count }} 篇</span>
@@ -153,13 +155,14 @@ function flagDotClass(f: string): string {
   return map[f] ?? "bg-gray-300"
 }
 
-const ICON_PATHS: Record<string, string> = {
-  site: "M12 2a10 10 0 100 20 10 10 0 000-20zM2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20",
-  category: "M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z",
-  chapter: "M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z",
+const ICON_NAMES: Record<string, string> = {
+  site: "mdi:earth", 
+  category: "mdi:folder", 
+  chapter: "mdi:book-open-page-variant" 
 }
-function iconPath(type: string): string {
-  return ICON_PATHS[type] || ICON_PATHS.chapter
+
+function getIconName(type: string): string {
+  return ICON_NAMES[type] || "mdi:file-document-outline" 
 }
 
 // 限定搜索范围：跳转到搜索页并带上该节点对应的筛选条件

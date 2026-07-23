@@ -41,7 +41,7 @@
               class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
               @mousedown.prevent="applyHistory(h)"
             >
-              <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <Icon name="mdi:clock-outline" class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0 -mt-px" />
               <span class="truncate">{{ h }}</span>
             </button>
           </div>
@@ -139,9 +139,7 @@
         aria-label="回到顶部"
         @click="scrollToTop"
       >
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
-        </svg>
+        <Icon name="mdi:chevron-up" class="w-5 h-5" />
       </button>
     </Transition>
   </div>
@@ -167,10 +165,16 @@ const HISTORY_KEY = "trans-search-history"
 const searchHistory = ref<string[]>([])
 
 function loadHistory() {
-  if (import.meta.server) return
+if (import.meta.server) return
   try {
     const raw = localStorage.getItem(HISTORY_KEY)
-    if (raw) searchHistory.value = JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      // 数值只保留字符串
+      if (Array.isArray(parsed)) {
+        searchHistory.value = parsed.filter((item): item is string => typeof item === 'string')
+      }
+    }
   } catch { /* ignore */ }
 }
 
@@ -195,8 +199,20 @@ function clearHistory() {
 }
 
 function hideHistoryDelayed() {
-  hideHistoryTimer = setTimeout(() => { showHistory.value = false }, 200)
+  if (hideHistoryTimer) {
+    clearTimeout(hideHistoryTimer)
+  }
+  hideHistoryTimer = setTimeout(() => { 
+    showHistory.value = false 
+  }, 200)
 }
+
+onBeforeUnmount(() => {
+  if (hideHistoryTimer) {
+    clearTimeout(hideHistoryTimer)
+    hideHistoryTimer = null
+  }
+})
 
 // Scroll-to-top
 function onScroll() {

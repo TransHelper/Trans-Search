@@ -1,7 +1,12 @@
 export default defineNuxtConfig({
   compatibilityDate: "2026-07-14",
   devtools: { enabled: true },
-  modules: ["@nuxtjs/tailwindcss"],
+  modules: ["@nuxtjs/tailwindcss", "@nuxt/icon"],
+  icon: {
+    serverBundle: {
+      collections: ["mdi"],
+    },
+  },
   tailwindcss: {
     config: {
       darkMode: "class",
