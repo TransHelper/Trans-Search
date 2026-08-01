@@ -2,6 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 1. 全局基础样式（亮色模式） */
+html {
+  color-scheme: light !important; /* 强制亮色原生控件 */
+}
+
 body {
-  @apply bg-gray-50 text-gray-900 min-h-screen;
+  @apply bg-gray-50 text-gray-900 min-h-screen transition-colors duration-300;
+}
+
+/* 2. 当 JS 加上 .dark 类时，强制深色模式 */
+html.dark {
+  color-scheme: dark !important; /* 【关键】强制深色原生控件（解决滚动条/表单亮色问题） */
+}
+
+html.dark body {
+  @apply bg-gray-950 text-gray-100;
+}
+
+/* 3. 手动接管深色模式下的滚动条样式，确保视觉绝对统一 */
+html.dark {
+  --scrollbar-bg: #1f2937; /* gray-800 */
+  --scrollbar-thumb: #4b5563; /* gray-600 */
+  --scrollbar-thumb-hover: #6b7280; /* gray-500 */
+}
+
+/* Webkit 内核浏览器（Chrome, Safari, Edge） */
+html.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background-color: var(--scrollbar-bg);
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+/* Firefox 浏览器 */
+html.dark * {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
+  scrollbar-width: thin;
 }
